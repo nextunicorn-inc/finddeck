@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SupportProgram {
+  id               String    @id @default(uuid())
+  source           String    // "k-startup" or "bizinfo"
+  sourceId         String    // pbancSn or pblancId
+  category         String    // 분류
+  title            String    // 제목
+  organization     String?   // 주관기관
+  region           String?   // 지역
+  applicationStart DateTime? // 접수 시작일
+  applicationEnd   DateTime? // 접수 마감일
+  url              String    // 상세 페이지 URL
+  description      String?   // 사업 개요
+  eligibility      String?   // 지원 자격 요건 (텍스트)
+  viewCount        Int?      // 조회수
+  status           String    @default("active") // active, closed
+  
+  // 매칭용 정형 데이터 필드
+  targetAge        String?   // 대상연령 (전체, 만39세이하 등)
+  targetRegion     String?   // 대상지역 (전국, 서울, 경기 등)
+  targetType       String?   // 대상기업유형 (일반기업, 예비창업자, 1인창조기업 등)
+  companyAge       String?   // 창업업력 (3년미만, 7년미만, 10년미만 등)
+  supportField     String?   // 지원분야 (사업화, 기술개발, 멘토링 등)
+  institutionType  String?   // 기관구분 (공공기관, 민간 등)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([source, sourceId])
+  @@index([source])
+  @@index([category])
+  @@index([applicationEnd])
+  @@index([targetRegion])
+  @@index([targetType])
+  @@index([companyAge])
+}
