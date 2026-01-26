@@ -45,29 +45,9 @@ export default async function ProgramDetailPage({ params }: Props) {
           </Link>
         </div>
 
+
         {/* 헤더 */}
         <div className="mb-8 border-b border-zinc-800 pb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${program.source === 'k-startup'
-              ? 'bg-purple-500/20 text-purple-400'
-              : 'bg-green-500/20 text-green-400'
-              }`}>
-              {program.source === 'k-startup' ? 'K-Startup' : '기업마당'}
-            </span>
-            <span className="inline-flex items-center rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
-              {program.category}
-            </span>
-            {program.viewCount !== null && (
-              <span className="text-xs text-zinc-500">
-                조회 {program.viewCount.toLocaleString()}
-              </span>
-            )}
-            {program.llmProcessed && (
-              <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
-                AI 분석 완료
-              </span>
-            )}
-          </div>
           <h1 className="text-3xl font-bold text-white mb-6 leading-tight">
             {program.title}
           </h1>
@@ -81,28 +61,6 @@ export default async function ProgramDetailPage({ params }: Props) {
               원본 공고 보기 ↗
             </a>
           </div>
-        </div>
-
-        {/* 기본 정보 그리드 (작게) */}
-        <div className="mb-10 rounded-xl border border-zinc-800 bg-zinc-950/30 p-4 sm:p-6">
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <dt className="text-xs text-zinc-500 mb-1">기관</dt>
-              <dd className="text-sm text-zinc-200">{program.organization || '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500 mb-1">지역</dt>
-              <dd className="text-sm text-zinc-200">{program.region || '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500 mb-1">분야</dt>
-              <dd className="text-sm text-zinc-200">{program.supportField || '-'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500 mb-1">마감일</dt>
-              <dd className="text-sm text-red-400 font-medium">{formatDate(program.applicationEnd)}</dd>
-            </div>
-          </dl>
         </div>
 
         {/* 메인 2단 그리드: 신청 자격 vs 제외 대상 */}

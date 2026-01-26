@@ -86,7 +86,9 @@ export default function Home() {
           .join(', ');
         setCrawlStatus(`✅ 완료! ${summary}`);
         // 데이터 새로고침
-        fetchPrograms();
+        await fetchPrograms();
+        router.refresh();
+        setCurrentPage(1);
       } else {
         setCrawlStatus('❌ 크롤링 실패');
       }

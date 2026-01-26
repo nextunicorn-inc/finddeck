@@ -9,8 +9,13 @@ export async function GET(request: NextRequest) {
   const source = searchParams.get('source');
   const maxPages = parseInt(searchParams.get('maxPages') || '3');
   const fetchDetails = searchParams.get('fetchDetails') !== 'false';
-  const usePuppeteer = searchParams.get('usePuppeteer') === 'true';
   const targetId = searchParams.get('targetId');
+
+  // 기업마당(bizinfo)은 이미지가 필수이므로 기본적으로 Puppeteer 사용
+  let usePuppeteer = searchParams.get('usePuppeteer') === 'true';
+  if (source === 'bizinfo' && !searchParams.has('usePuppeteer')) {
+    usePuppeteer = true;
+  }
 
   // 개발 환경에서는 5개 제한, 프로덕션은 무제한
   const isDev = process.env.NODE_ENV === 'development';
