@@ -52,12 +52,16 @@ export async function POST(request: NextRequest) {
           program.description || ''
         );
 
-        // DB 업데이트
+        // DB 업데이트 (Refactoring: New Fields)
         await prisma.supportProgram.update({
           where: { id: program.id },
           data: {
-            applicationTarget: target ? JSON.stringify(target) : null,
+            aiSummary: target?.aiSummary,
+            targetDetail: target?.targetDetail,
+            exclusionDetail: target?.exclusionDetail,
             llmProcessed: true,
+            // Deprecated field can be cleared or ignored
+            applicationTarget: null,
           },
         });
 

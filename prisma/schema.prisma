@@ -31,7 +31,12 @@ model SupportProgram {
   supportField     String?   // 지원분야 (사업화, 기술개발, 멘토링 등)
   institutionType  String?   // 기관구분 (공공기관, 민간 등)
   
-  // LLM 추출 데이터
+  // LLM 추출 데이터 (Refactoring)
+  aiSummary        String?   // 공고 전체 요약
+  targetDetail     String?   // 신청 자격 상세 (Full Text)
+  exclusionDetail  String?   // 제외 대상 상세 (Full Text)
+
+  // (Deprecated)
   applicationTarget String?  // LLM 추출된 신청대상 (JSON)
   llmProcessed      Boolean  @default(false)  // LLM 처리 완료 여부
   
