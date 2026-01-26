@@ -272,7 +272,7 @@ export default function Home() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-zinc-500">
-                          {formatDate(program.createdAt)}
+                          {formatDate(program.updatedAt)}
                         </td>
                       </tr>
                     );

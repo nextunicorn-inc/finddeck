@@ -46,8 +46,7 @@ export async function GET(request: NextRequest) {
       prisma.supportProgram.findMany({
         where,
         orderBy: [
-          { applicationEnd: 'asc' }, // 마감 임박 순
-          { createdAt: 'desc' },
+          { updatedAt: 'desc' }, // 최신 수집일 순
         ],
         skip,
         take: limit,
