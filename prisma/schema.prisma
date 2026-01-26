@@ -29,13 +29,14 @@ model SupportProgram {
   targetType       String?   // 대상기업유형 (일반기업, 예비창업자, 1인창조기업 등)
   companyAge       String?   // 창업업력 (3년미만, 7년미만, 10년미만 등)
   supportField     String?   // 지원분야 (사업화, 기술개발, 멘토링 등)
+  targetIndustry   String?   // 대상업종 (제조업, SW, 콘텐츠 등) - New Matching Criteria
   institutionType  String?   // 기관구분 (공공기관, 민간 등)
   
-  // LLM 추출 데이터 (Refactoring)
-  aiSummary        String?   // 공고 전체 요약
-  targetDetail     String?   // 신청 자격 상세 (Full Text)
-  exclusionDetail  String?   // 제외 대상 상세 (Full Text)
-
+  // AI 추출 필드
+  aiSummary         String?   // @db.Text (SQLite doesn't need @db.Text)
+  targetDetail      String?
+  exclusionDetail   String?
+  
   // (Deprecated)
   applicationTarget String?  // LLM 추출된 신청대상 (JSON)
   llmProcessed      Boolean  @default(false)  // LLM 처리 완료 여부
