@@ -444,6 +444,7 @@ export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlRes
             });
 
             successCount++;
+            totalProcessed++;
           } catch (itemError) {
             const errorMsg = `공고 ${item.sourceId} 처리 실패: ${itemError}`;
             console.error(`[bizinfo] ${errorMsg}`);

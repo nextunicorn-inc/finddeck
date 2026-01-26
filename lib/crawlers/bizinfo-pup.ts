@@ -98,10 +98,18 @@ export async function processBizinfoPage(browser: Browser, url: string, id: stri
             // 마지막 자투리가 너무 작으면(예: 100px) 무시하거나 포함
             if (height < 100 && screenshots.length > 0) break;
 
+            // 렌더링 트리거: 해당 위치로 스크롤 이동
+            try {
+              await viewerFrame.evaluate((y) => window.scrollTo(0, y), capturedHeight);
+              await new Promise(resolve => setTimeout(resolve, 2000)); // 렌더링 대기
+            } catch (e) {
+              console.warn(`[Puppeteer] Scroll failed: ${e}`);
+            }
+
             const buffer = await bodyEl.screenshot({
               encoding: 'base64',
               type: 'jpeg',
-              quality: 80,
+              quality: 100,
               clip: {
                 x: 0,
                 y: capturedHeight,
@@ -109,6 +117,18 @@ export async function processBizinfoPage(browser: Browser, url: string, id: stri
                 height: height
               }
             });
+
+            // 디버깅용 이미지 저장 (로컬 확인용)
+            try {
+              const fs = require('fs');
+              const path = require('path');
+              const debugPath = path.join(process.cwd(), `debug_chunk_${screenshots.length}.jpg`);
+              fs.writeFileSync(debugPath, Buffer.from(buffer as string, 'base64'));
+              console.log(`[Puppeteer] Saved debug image to ${debugPath}`);
+            } catch (e) {
+              console.error('[Puppeteer] Failed to save debug image:', e);
+            }
+
             screenshots.push(buffer as string);
             capturedHeight += height;
           }
