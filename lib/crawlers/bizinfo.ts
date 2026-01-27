@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { SupportProgramData, CrawlResult, CrawlOptions } from './types';
 import prisma from '../prisma';
 import { getCleanText } from './utils';
+import type { Browser } from 'puppeteer';
 import puppeteer from 'puppeteer';
 import { processBizinfoPage } from './bizinfo-pup';
 import { extractApplicationTarget } from '../llm/extract-target';
@@ -56,13 +57,25 @@ async function fetchListPage(page: number = 1, rows: number = 15): Promise<strin
 /**
  * 날짜 문자열 파싱 (YYYY-MM-DD, YYYY.MM.DD 등)
  */
-function parseDate(dateStr: string): Date | undefined {
+/**
+ * 날짜 문자열 파싱 (YYYY-MM-DD, YYYY.MM.DD 등)
+ * isEnd: true면 23:59:59, false면 00:00:00으로 설정
+ */
+function parseDate(dateStr: string, isEnd: boolean = false): Date | undefined {
   if (!dateStr) return undefined;
 
   // YYYY-MM-DD 또는 YYYY.MM.DD 형식
   const match = dateStr.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
   if (match) {
-    return new Date(`${match[1]}-${match[2]}-${match[3]}`);
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const day = parseInt(match[3], 10);
+
+    if (isEnd) {
+      return new Date(year, month, day, 23, 59, 59);
+    } else {
+      return new Date(year, month, day, 0, 0, 0);
+    }
   }
 
   return undefined;
@@ -113,8 +126,8 @@ function parseListPage(html: string): ListItem[] {
       // 접수기간 추출
       const periodMatch = rowText.match(/(\d{4}[-./]\d{2}[-./]\d{2})\s*[~-]\s*(\d{4}[-./]\d{2}[-./]\d{2})/);
       if (periodMatch) {
-        const applicationStart = parseDate(periodMatch[1]);
-        const applicationEnd = parseDate(periodMatch[2]);
+        const applicationStart = parseDate(periodMatch[1], false);
+        const applicationEnd = parseDate(periodMatch[2], true);
 
         items.push({
           sourceId,
@@ -175,6 +188,7 @@ async function fetchDetailPage(pblancId: string): Promise<string> {
  * 상세 페이지 파싱 결과 타입
  */
 interface DetailPageData {
+  title?: string;
   description?: string;
   eligibility?: string;
   organization?: string;
@@ -193,6 +207,17 @@ function parseDetailPage(html: string): DetailPageData {
   const result: DetailPageData = {};
 
   console.log('[bizinfo] parseDetailPage called, HTML length:', html.length);
+
+  // 제목 추출
+  let title = $('.view_title').text().trim() || $('h1').text().trim() || $('.title').text().trim();
+  if (title) {
+    // "지원사업 공고" 접두어 및 "QR코드..." 접미어 제거
+    title = title
+      .replace(/^지원사업\s*공고\s*/, '')
+      .replace(/QR코드기업마당\s*앱\s*다운로드.*$/i, '')
+      .trim();
+    result.title = title;
+  }
 
   // 방법 1: 기업마당 공통 구조 (span.s_title + 다음 형제 div.txt)
   $('span.s_title').each((_, el) => {
@@ -215,8 +240,8 @@ function parseDetailPage(html: string): DetailPageData {
     } else if (headerText.includes('신청기간') || headerText.includes('접수기간')) {
       const periodMatch = value.match(/(\d{4}[-./]\d{2}[-./]\d{2})\s*[~-]\s*(\d{4}[-./]\d{2}[-./]\d{2})/);
       if (periodMatch) {
-        const start = parseDate(periodMatch[1]);
-        const end = parseDate(periodMatch[2]);
+        const start = parseDate(periodMatch[1], false);
+        const end = parseDate(periodMatch[2], true);
         if (start) result.applicationStart = start;
         if (end) result.applicationEnd = end;
       }
@@ -243,8 +268,8 @@ function parseDetailPage(html: string): DetailPageData {
       } else if (headerText.includes('신청기간') || headerText.includes('접수기간')) {
         const periodMatch = value.match(/(\d{4}[-./]\d{2}[-./]\d{2})\s*[~-]\s*(\d{4}[-./]\d{2}[-./]\d{2})/);
         if (periodMatch) {
-          const start = parseDate(periodMatch[1]);
-          const end = parseDate(periodMatch[2]);
+          const start = parseDate(periodMatch[1], false);
+          const end = parseDate(periodMatch[2], true);
           if (start) result.applicationStart = start;
           if (end) result.applicationEnd = end;
         }
@@ -310,21 +335,25 @@ function getTotalPages(html: string): number {
 /**
  * 기업마당 전체 크롤링
  */
-export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlResult> {
+export async function crawlBizinfo(options: CrawlOptions = {}, browser?: Browser): Promise<CrawlResult> {
   const { maxPages = 3, fetchDetails = true, usePuppeteer = false, targetId, limit } = options;
   const errors: string[] = [];
   let successCount = 0;
   let totalProcessed = 0;
-  let browser = null;
+
+  let localBrowser: Browser | undefined;
+  const activeBrowser = browser;
 
   try {
-    if (usePuppeteer) {
+    if (usePuppeteer && !activeBrowser) {
       console.log('[bizinfo] Launching Puppeteer...');
-      browser = await puppeteer.launch({
+      localBrowser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080'],
       });
     }
+
+    const workingBrowser = activeBrowser || localBrowser;
 
     console.log('[bizinfo] 크롤링 시작...');
 
@@ -360,7 +389,7 @@ export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlRes
           if (limit && totalProcessed >= limit) break;
 
           try {
-            let detailData = {};
+            let detailData: DetailPageData = {};
 
             // 상세 페이지 크롤링 (옵션)
             if (fetchDetails) {
@@ -368,51 +397,61 @@ export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlRes
               const detailHtml = await fetchDetailPage(item.sourceId);
               detailData = parseDetailPage(detailHtml);
 
-              // LLM Processing: Vision AI (Puppeteer) or Text-based
-              if (usePuppeteer && browser) {
-                // Vision AI 방식
+              // 1. 텍스트 기반 LLM 분석 (우선 시도)
+              try {
+                const textTarget = await extractApplicationTarget(
+                  (detailData as any).eligibility || '',
+                  (detailData as any).description || ''
+                );
+                if (textTarget) {
+                  (detailData as any).companyAge = textTarget.companyAge;
+                  (detailData as any).targetRegion = textTarget.targetRegion;
+                  (detailData as any).targetAge = textTarget.targetAge;
+                  (detailData as any).targetIndustry = textTarget.targetIndustry;
+                  (detailData as any).llmProcessed = true;
+                }
+              } catch (llmError) {
+                console.error(`[bizinfo] LLM error for ${item.sourceId}:`, llmError);
+              }
+
+              // 2. Fallback: Puppeteer Vision AI (필수 데이터 누락 시)
+              // 필수 데이터: 업력, 지역 + 모집 기간 (Start/End 중 하나라도 없으면)
+              const missingCritical =
+                !(detailData as any).companyAge ||
+                !(detailData as any).targetRegion ||
+                !(detailData as any).applicationStart ||
+                !(detailData as any).applicationEnd;
+
+              if (usePuppeteer && workingBrowser && missingCritical) {
+                console.log(`[bizinfo] 필수 데이터 누락 (${item.sourceId}), Puppeteer Vision AI 시도...`);
                 try {
-                  const puppeteerTarget = await processBizinfoPage(browser, item.url, item.sourceId);
+                  const puppeteerTarget = await processBizinfoPage(workingBrowser, item.url, item.sourceId);
                   if (puppeteerTarget) {
-                    (detailData as any).aiSummary = puppeteerTarget.aiSummary;
-                    (detailData as any).companyAge = puppeteerTarget.companyAge;
-                    (detailData as any).targetRegion = puppeteerTarget.targetRegion;
-                    (detailData as any).targetAge = puppeteerTarget.targetAge;
-                    (detailData as any).targetIndustry = puppeteerTarget.targetIndustry;
-                    (detailData as any).exclusionDetail = puppeteerTarget.exclusionDetail;
+                    // Vision AI 결과가 있으면 덮어쓰거나 채워넣음
+                    if (puppeteerTarget.companyAge) (detailData as any).companyAge = puppeteerTarget.companyAge;
+                    if (puppeteerTarget.targetRegion) (detailData as any).targetRegion = puppeteerTarget.targetRegion;
+                    if (puppeteerTarget.targetAge) (detailData as any).targetAge = puppeteerTarget.targetAge;
+                    if (puppeteerTarget.targetIndustry) (detailData as any).targetIndustry = puppeteerTarget.targetIndustry;
                     (detailData as any).llmProcessed = true;
                   }
                 } catch (pupError) {
                   console.error(`[bizinfo] Puppeteer error for ${item.sourceId}:`, pupError);
                 }
-              } else {
-                // 텍스트 기반 LLM 분석
-                try {
-                  const textTarget = await extractApplicationTarget(
-                    (detailData as any).eligibility || '',
-                    (detailData as any).description || ''
-                  );
-                  if (textTarget) {
-                    (detailData as any).aiSummary = textTarget.aiSummary;
-                    (detailData as any).companyAge = textTarget.companyAge;
-                    (detailData as any).targetRegion = textTarget.targetRegion;
-                    (detailData as any).targetAge = textTarget.targetAge;
-                    (detailData as any).targetIndustry = textTarget.targetIndustry;
-                    (detailData as any).exclusionDetail = textTarget.exclusionDetail;
-                    (detailData as any).llmProcessed = true;
-                  }
-                } catch (llmError) {
-                  console.error(`[bizinfo] LLM error for ${item.sourceId}:`, llmError);
-                }
               }
             }
 
             // DB에 저장 (upsert)
+            // item.title이 'Target Debug'인 경우(단일 타겟 크롤링)에만 상세 페이지 제목 사용
+            // 그 외(리스트 크롤링)에는 리스트에서 가져온 깔끔한 제목(item.title) 유지
+            const finalTitle = (item.title === 'Target Debug' && detailData.title)
+              ? detailData.title
+              : item.title;
+
             const programData: SupportProgramData = {
               source: 'bizinfo',
               sourceId: item.sourceId,
               category: item.category,
-              title: item.title,
+              title: finalTitle,
               organization: item.organization,
               region: item.region,
               applicationStart: item.applicationStart,
@@ -443,9 +482,6 @@ export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlRes
                 targetAge: (detailData as any)?.targetAge,
                 targetIndustry: (detailData as any)?.targetIndustry,
 
-                aiSummary: (detailData as any)?.aiSummary,
-                targetDetail: null, // Clear old field
-                exclusionDetail: (detailData as any)?.exclusionDetail,
                 llmProcessed: (detailData as any)?.llmProcessed || false,
                 applicationTarget: null, // Clear old field
               },
@@ -467,9 +503,6 @@ export async function crawlBizinfo(options: CrawlOptions = {}): Promise<CrawlRes
                 targetIndustry: (detailData as any)?.targetIndustry,
                 supportField: programData.supportField,
 
-                aiSummary: (detailData as any)?.aiSummary,
-                targetDetail: null,
-                exclusionDetail: (detailData as any)?.exclusionDetail,
                 llmProcessed: (detailData as any)?.llmProcessed || false,
                 applicationTarget: null,
               },

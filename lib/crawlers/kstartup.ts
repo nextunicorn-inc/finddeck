@@ -2,6 +2,8 @@ import * as cheerio from 'cheerio';
 import { SupportProgramData, CrawlResult, CrawlOptions } from './types';
 import prisma from '../prisma';
 import { cleanTitle, getCleanText } from './utils';
+import type { Browser } from 'puppeteer';
+import { processKStartupPage } from './kstartup-pup';
 
 const BASE_URL = 'https://www.k-startup.go.kr';
 const LIST_URL = `${BASE_URL}/web/contents/bizpbanc-ongoing.do`;
@@ -414,7 +416,7 @@ function getTotalPages(html: string): number {
 /**
  * k-startup 전체 크롤링
  */
-export async function crawlKStartup(options: CrawlOptions = {}): Promise<CrawlResult> {
+export async function crawlKStartup(options: CrawlOptions = {}, browser?: Browser): Promise<CrawlResult> {
   const { maxPages = 3, fetchDetails = true, limit } = options;
   const errors: string[] = [];
   let successCount = 0;
@@ -443,13 +445,42 @@ export async function crawlKStartup(options: CrawlOptions = {}): Promise<CrawlRe
           if (limit && totalProcessed >= limit) break;
 
           try {
-            let detailData = {};
+            let detailData: Partial<DetailPageData> = {};
 
             // 상세 페이지 크롤링 (옵션)
             if (fetchDetails) {
               await delay(REQUEST_DELAY);
               const detailHtml = await fetchDetailPage(item.sourceId);
               detailData = parseDetailPage(detailHtml);
+
+              // Puppeteer / Vision AI Logic Fallback
+              // 텍스트 파싱으로 주요 정보(업력, 지역, 모집기간)가 없으면 첨부파일(뷰어) 확인
+              const missingCritical =
+                !detailData.companyAge ||
+                !detailData.targetRegion ||
+                !detailData.applicationStart ||
+                !detailData.applicationEnd;
+
+              if (options.usePuppeteer && browser && missingCritical) {
+                try {
+                  const pupResult = await processKStartupPage(browser, item.url, item.sourceId);
+                  if (pupResult) {
+                    console.log(`[k-startup] Vision AI result merged for ${item.sourceId}`);
+                    // 텍스트 정보가 없으면 Vision 결과로 채움 (기존 값 우선, 없으면 Vision 값)
+                    detailData.companyAge = detailData.companyAge || pupResult.companyAge;
+                    detailData.targetRegion = detailData.targetRegion || pupResult.targetRegion;
+                    detailData.targetAge = detailData.targetAge || pupResult.targetAge;
+                    detailData.targetType = detailData.targetType || pupResult.targetIndustry; // targetIndustry -> targetType mapping?
+                    // targetIndustry field doesn't exist in 'parseDetailPage' result interface yet, but exists in SupportProgramData
+                    // We need to extend DetailPageData or just cast.
+                    (detailData as any).targetIndustry = pupResult.targetIndustry;
+
+                    (detailData as any).llmProcessed = true;
+                  }
+                } catch (pupError) {
+                  console.error(`[k-startup] Puppeteer error for ${item.sourceId}:`, pupError);
+                }
+              }
             }
 
             // DB에 저장 (upsert)

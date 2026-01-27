@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { crawlKStartup, crawlBizinfo, CrawlResult } from '@/lib/crawlers';
+import puppeteer, { Browser } from 'puppeteer';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5분 타임아웃
@@ -24,14 +25,32 @@ export async function GET(request: NextRequest) {
   const results: { [key: string]: CrawlResult } = {};
 
   try {
-    if (!source || source === 'k-startup') {
-      console.log('k-startup 크롤링 시작...');
-      results['k-startup'] = await crawlKStartup({ maxPages, fetchDetails, limit });
+    let browser: Browser | undefined;
+    if (usePuppeteer) {
+      try {
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+      } catch (e) {
+        console.error('Puppeteer Launch Failed:', e);
+      }
     }
 
-    if (!source || source === 'bizinfo') {
-      console.log('기업마당 크롤링 시작...');
-      results['bizinfo'] = await crawlBizinfo({ maxPages, fetchDetails, usePuppeteer, targetId: targetId || undefined, limit });
+    try {
+      if (!source || source === 'k-startup') {
+        console.log('k-startup 크롤링 시작...');
+        results['k-startup'] = await crawlKStartup({ maxPages, fetchDetails, limit, usePuppeteer }, browser);
+      }
+
+      if (!source || source === 'bizinfo') {
+        console.log('기업마당 크롤링 시작...');
+        results['bizinfo'] = await crawlBizinfo({ maxPages, fetchDetails, usePuppeteer, targetId: targetId || undefined, limit }, browser);
+      }
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
     }
 
     const totalCount = Object.values(results).reduce((sum, r) => sum + r.count, 0);
