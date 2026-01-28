@@ -1,292 +1,276 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent } from 'react';
 
-interface SupportProgram {
+interface MatchingProgram {
   id: string;
-  source: string;
-  sourceId: string;
-  category: string;
   title: string;
   organization: string | null;
-  region: string | null;
-  applicationStart: string | null;
   applicationEnd: string | null;
   url: string;
-  viewCount: number | null;
-  createdAt: string;
-  updatedAt: string;
+  companyAge: string | null;
+  targetRegion: string | null;
+  targetAge: string | null;
+  targetIndustry: string | null;
 }
 
-interface PaginationInfo {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
-
-interface CrawlResult {
+interface MatchResult {
   success: boolean;
-  count: number;
-  errors?: string[];
+  data: MatchingProgram[];
+  total: number;
 }
 
 export default function Home() {
-  const router = useRouter();
-  const [programs, setPrograms] = useState<SupportProgram[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [foundingYear, setFoundingYear] = useState('');
+  const [region, setRegion] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [results, setResults] = useState<MatchingProgram[]>([]);
   const [loading, setLoading] = useState(false);
-  const [crawling, setCrawling] = useState(false);
-  const [crawlStatus, setCrawlStatus] = useState<string | null>(null);
-  const [selectedSource, setSelectedSource] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searched, setSearched] = useState(false);
 
-  // 데이터 조회
-  const fetchPrograms = useCallback(async () => {
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
     setLoading(true);
+    setSearched(true);
+
     try {
       const params = new URLSearchParams();
-      params.set('page', currentPage.toString());
-      params.set('limit', '15');
-      if (selectedSource) params.set('source', selectedSource);
+      if (foundingYear) params.set('foundingYear', foundingYear);
+      if (region) params.set('region', region);
+      if (birthMonth) params.set('birthMonth', birthMonth);
+      if (industry) params.set('industry', industry);
 
-      const response = await fetch(`/api/programs?${params}`);
-      const data = await response.json();
+      const response = await fetch(`/api/match?${params}`);
+      const data: MatchResult = await response.json();
 
       if (data.success) {
-        setPrograms(data.data);
-        setPagination(data.pagination);
+        setResults(data.data);
       }
     } catch (error) {
-      console.error('데이터 조회 실패:', error);
+      console.error('매칭 실패:', error);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, selectedSource]);
-
-  // 크롤링 실행
-  const handleCrawl = async (source?: string) => {
-    setCrawling(true);
-    setCrawlStatus('크롤링 중...');
-
-    try {
-      const params = new URLSearchParams();
-      if (source) params.set('source', source);
-      params.set('maxPages', '2');
-      params.set('fetchDetails', 'true');
-
-      const response = await fetch(`/api/crawl?${params}`);
-      const data = await response.json();
-
-      if (data.success) {
-        const results = data.results as { [key: string]: CrawlResult };
-        const summary = Object.entries(results)
-          .map(([key, val]) => `${key}: ${val.count}개`)
-          .join(', ');
-        setCrawlStatus(`✅ 완료! ${summary}`);
-        // 데이터 새로고침
-        await fetchPrograms();
-        router.refresh();
-        setCurrentPage(1);
-      } else {
-        setCrawlStatus('❌ 크롤링 실패');
-      }
-    } catch (error) {
-      console.error('크롤링 실패:', error);
-      setCrawlStatus('❌ 크롤링 오류 발생');
-    } finally {
-      setCrawling(false);
-      // 3초 후 상태 메시지 제거
-      setTimeout(() => setCrawlStatus(null), 5000);
-    }
   };
 
-  // 초기 로드
-  useEffect(() => {
-    fetchPrograms();
-  }, [fetchPrograms]);
-
-  // 날짜 포맷팅
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
-    const yy = date.getFullYear().toString().slice(-2);
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${yy}.${mm}.${dd} ${hh}:${min}:${ss}`;
+    return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // D-day 계산
   const getDday = (dateStr: string | null) => {
     if (!dateStr) return null;
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const endDate = new Date(dateStr);
+    endDate.setHours(0, 0, 0, 0);
+
     const diff = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff < 0) return null;
+
+    if (diff < 0) return '마감';
     if (diff === 0) return 'D-Day';
     return `D-${diff}`;
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 text-zinc-100">
       {/* 헤더 */}
-      <header className="border-b border-zinc-800 bg-zinc-950">
-        <div className="mx-auto max-w-7xl px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-white">
-              파인드덱 <span className="text-zinc-500 font-normal text-sm ml-2">Admin</span>
-            </h1>
-            <div className="flex items-center gap-3">
-              {crawlStatus && (
-                <span className="text-sm text-zinc-400">{crawlStatus}</span>
-              )}
-              <button
-                onClick={() => handleCrawl()}
-                disabled={crawling}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {crawling ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    크롤링 중...
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    크롤링 실행
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm">
+        <div className="mx-auto max-w-4xl px-6 py-5">
+          <h1 className="text-2xl font-bold text-white">
+            파인드덱 <span className="text-blue-400 font-normal text-base ml-2">지원사업 매칭</span>
+          </h1>
+          <p className="text-zinc-400 text-sm mt-1">회사 정보를 입력하면 맞춤형 지원사업을 찾아드립니다</p>
         </div>
       </header>
 
-      {/* 메인 컨텐츠 */}
-      <main className="mx-auto max-w-7xl px-6 py-6">
-        {/* 필터 및 통계 */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <select
-              value={selectedSource}
-              onChange={(e) => {
-                setSelectedSource(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">전체 소스</option>
-              <option value="k-startup">K-Startup</option>
-              <option value="bizinfo">기업마당</option>
-            </select>
-            <button
-              onClick={() => fetchPrograms()}
-              disabled={loading}
-              className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-            >
-              새로고침
-            </button>
-          </div>
-          {pagination && (
-            <div className="text-sm text-zinc-500">
-              총 <span className="text-zinc-300 font-medium">{pagination.total}</span>개 공고
-            </div>
-          )}
-        </div>
+      {/* 메인 */}
+      <main className="mx-auto max-w-4xl px-6 py-8">
+        {/* 입력 폼 */}
+        <form onSubmit={handleSubmit} className="bg-zinc-800/50 rounded-2xl p-6 mb-8 border border-zinc-700/50">
+          <h2 className="text-lg font-semibold text-white mb-6">회사 정보 입력</h2>
 
-        {/* 테이블 */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider w-32">소스</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">제목</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider w-40">수집일</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {loading ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-12 text-center text-zinc-500">
-                      <svg className="h-6 w-6 animate-spin mx-auto mb-2" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      로딩 중...
-                    </td>
-                  </tr>
-                ) : programs.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-12 text-center text-zinc-500">
-                      데이터가 없습니다. 크롤링을 실행해주세요.
-                    </td>
-                  </tr>
-                ) : (
-                  programs.map((program) => (
-                    <tr
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 설립연도 */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                회사 설립연도
+              </label>
+              <input
+                type="number"
+                value={foundingYear}
+                onChange={(e) => setFoundingYear(e.target.value)}
+                placeholder="예: 2022"
+                min="1900"
+                max={new Date().getFullYear()}
+                className="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 회사 지역 */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                회사 소재지
+              </label>
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                className="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">전국 (전체)</option>
+                <option value="서울">서울</option>
+                <option value="경기">경기</option>
+                <option value="인천">인천</option>
+                <option value="부산">부산</option>
+                <option value="대구">대구</option>
+                <option value="광주">광주</option>
+                <option value="대전">대전</option>
+                <option value="울산">울산</option>
+                <option value="세종">세종</option>
+                <option value="강원">강원</option>
+                <option value="충북">충북</option>
+                <option value="충남">충남</option>
+                <option value="전북">전북</option>
+                <option value="전남">전남</option>
+                <option value="경북">경북</option>
+                <option value="경남">경남</option>
+                <option value="제주">제주</option>
+              </select>
+            </div>
+
+            {/* 대표자 생년월 */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                대표자 생년월
+              </label>
+              <input
+                type="month"
+                value={birthMonth}
+                onChange={(e) => setBirthMonth(e.target.value)}
+                className="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 업종 */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                회사 업종
+              </label>
+              <select
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                className="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">전분야 (전체)</option>
+                <option value="SW">SW / IT</option>
+                <option value="제조">제조업</option>
+                <option value="바이오">바이오 / 헬스케어</option>
+                <option value="콘텐츠">콘텐츠 / 미디어</option>
+                <option value="유통">유통 / 물류</option>
+                <option value="관광">관광 / 서비스</option>
+                <option value="에너지">에너지 / 환경</option>
+                <option value="농업">농업 / 식품</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-4 text-base font-semibold text-white transition-all hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '매칭 중...' : '🔍 맞춤 지원사업 찾기'}
+          </button>
+        </form>
+
+        {/* 결과 */}
+        {searched && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">
+                매칭 결과 <span className="text-blue-400 font-normal">({results.length}건)</span>
+              </h2>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-12 text-zinc-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                매칭 중...
+              </div>
+            ) : results.length === 0 ? (
+              <div className="text-center py-12 text-zinc-500 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                조건에 맞는 지원사업이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {results.map((program) => {
+                  const dday = getDday(program.applicationEnd);
+                  return (
+                    <a
                       key={program.id}
-                      onClick={() => router.push(`/programs/${program.id}`)}
-                      className="hover:bg-zinc-900/50 transition-colors cursor-pointer"
+                      href={program.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 hover:border-blue-500/50 hover:bg-zinc-800 transition-all group"
                     >
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${program.source === 'k-startup'
-                          ? 'bg-purple-500/20 text-purple-400'
-                          : 'bg-green-500/20 text-green-400'
-                          }`}>
-                          {program.source === 'k-startup' ? 'K-Startup' : '기업마당'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-zinc-100 group-hover:text-blue-400 transition-colors line-clamp-2">
-                          {program.title.replace(/\s+/g, ' ').trim()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-zinc-400">
-                        {formatDate(program.createdAt)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-medium text-white group-hover:text-blue-400 transition-colors line-clamp-2">
+                            {program.title}
+                          </h3>
+                          <p className="text-sm text-zinc-400 mt-1">
+                            {program.organization || '기관 정보 없음'}
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {program.companyAge && (
+                              <span className="inline-flex items-center rounded-full bg-purple-500/20 px-2.5 py-1 text-xs text-purple-300">
+                                업력: {program.companyAge}
+                              </span>
+                            )}
+                            {program.targetRegion && (
+                              <span className="inline-flex items-center rounded-full bg-green-500/20 px-2.5 py-1 text-xs text-green-300">
+                                지역: {program.targetRegion}
+                              </span>
+                            )}
+                            {program.targetAge && (
+                              <span className="inline-flex items-center rounded-full bg-orange-500/20 px-2.5 py-1 text-xs text-orange-300">
+                                연령: {program.targetAge}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {dday && (
+                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${dday === 'D-Day' || parseInt(dday.replace('D-', '')) <= 7
+                              ? 'bg-red-500/20 text-red-400'
+                              : 'bg-blue-500/20 text-blue-400'
+                              }`}>
+                              {dday}
+                            </span>
+                          )}
+                          <p className="text-xs text-zinc-500 mt-2">
+                            마감: {formatDate(program.applicationEnd)}
+                          </p>
+                        </div>
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
           </div>
-
-          {/* 페이지네이션 */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="border-t border-zinc-800 px-4 py-3 flex items-center justify-between">
-              <div className="text-sm text-zinc-500">
-                페이지 {pagination.page} / {pagination.totalPages}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  이전
-                </button>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
-                  disabled={currentPage === pagination.totalPages}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  다음
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </main>
+
+      {/* 푸터 */}
+      <footer className="border-t border-zinc-800/50 mt-12">
+        <div className="mx-auto max-w-4xl px-6 py-4 text-center text-sm text-zinc-500">
+          <a href="/admin" className="hover:text-zinc-300 transition-colors">관리자</a>
+        </div>
+      </footer>
     </div>
   );
 }
