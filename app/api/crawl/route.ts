@@ -18,9 +18,8 @@ export async function GET(request: NextRequest) {
     usePuppeteer = true;
   }
 
-  // 개발 환경에서는 5개 제한, 프로덕션은 무제한
-  const isDev = process.env.NODE_ENV === 'development';
-  const limit: number | undefined = isDev ? 5 : undefined;
+  // 개발 환경에서는 5개 제한, 프로덕션은 무제한 -> 사용자 요청으로 제한 해제
+  const limit: number | undefined = undefined;
 
   const results: { [key: string]: CrawlResult } = {};
 
