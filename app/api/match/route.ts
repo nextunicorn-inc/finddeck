@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
         targetRegion: true,
         targetAge: true,
         targetIndustry: true,
+        supportField: true,
+        fundingAmount: true,
       },
     });
 
