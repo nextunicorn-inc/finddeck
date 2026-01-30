@@ -4,6 +4,7 @@ import prisma from '../prisma';
 import { cleanTitle, getCleanText } from './utils';
 import type { Browser } from 'puppeteer';
 import { processKStartupPage } from './kstartup-pup';
+import { inferSupportField } from '../llm/extract-target';
 
 const BASE_URL = 'https://www.k-startup.go.kr';
 const LIST_URL = `${BASE_URL}/web/contents/bizpbanc-ongoing.do`;
@@ -427,6 +428,14 @@ function parseDetailPage(html: string): DetailPageData {
   if (result.description) result.description = result.description.substring(0, 5000);
   if (result.eligibility) result.eligibility = result.eligibility.substring(0, 2000);
   if (result.title) result.title = result.title.substring(0, 500);
+
+  // 키워드 기반 supportField 추론 (테이블 추출 실패 시 fallback)
+  if (!result.supportField && result.description) {
+    const inferred = inferSupportField(result.description + ' ' + (result.eligibility || ''));
+    if (inferred) {
+      result.supportField = inferred;
+    }
+  }
 
   return result;
 }

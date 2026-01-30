@@ -5,7 +5,7 @@ import { getCleanText } from './utils';
 import type { Browser } from 'puppeteer';
 import puppeteer from 'puppeteer';
 import { processBizinfoPage } from './bizinfo-pup';
-import { extractApplicationTarget } from '../llm/extract-target';
+import { extractApplicationTarget, inferSupportField } from '../llm/extract-target';
 
 const BASE_URL = 'https://www.bizinfo.go.kr';
 const LIST_URL = `${BASE_URL}/web/lay1/bbs/S1T122C128/AS/74/list.do`;
@@ -445,6 +445,15 @@ export async function crawlBizinfo(options: CrawlOptions = {}, browser?: Browser
               const detailHtml = await fetchDetailPage(item.sourceId);
               detailData = parseDetailPage(detailHtml);
 
+              // 0. 키워드 기반 supportField 추론 (LLM 호출 전 빠른 판단)
+              const keywordSupportField = inferSupportField(
+                ((detailData as any).description || '') + ' ' + ((detailData as any).eligibility || '')
+              );
+              if (keywordSupportField) {
+                (detailData as any).supportField = keywordSupportField;
+                console.log(`[bizinfo] Keyword inferred supportField: ${keywordSupportField} for ${item.sourceId}`);
+              }
+
               // 1. 텍스트 기반 LLM 분석 (우선 시도)
               try {
                 const textTarget = await extractApplicationTarget(
@@ -456,6 +465,11 @@ export async function crawlBizinfo(options: CrawlOptions = {}, browser?: Browser
                   (detailData as any).targetRegion = textTarget.targetRegion;
                   (detailData as any).targetAge = textTarget.targetAge;
                   (detailData as any).targetIndustry = textTarget.targetIndustry;
+                  // LLM supportField는 키워드 추론 실패 시에만 사용
+                  if (!(detailData as any).supportField && textTarget.supportField) {
+                    (detailData as any).supportField = textTarget.supportField;
+                    console.log(`[bizinfo] LLM inferred supportField: ${textTarget.supportField} for ${item.sourceId}`);
+                  }
                   (detailData as any).llmProcessed = true;
                 }
               } catch (llmError) {
