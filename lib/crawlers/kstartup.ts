@@ -203,6 +203,39 @@ async function fetchDetailPage(pbancSn: string): Promise<string> {
 }
 
 /**
+ * 창업 업력 텍스트 정제 (예: "1년미만, 2년미만, ... 10년미만" -> "10년 미만")
+ */
+function normalizeCompanyAge(text: string): string {
+  // 원래 텍스트에 '예비'가 포함되어 있는지 확인
+  const hasPre = text.includes('예비');
+
+  // 숫자 추출 (N년)
+  const years: number[] = [];
+  const matches = text.matchAll(/(\d+)년/g);
+  for (const m of matches) {
+    years.push(parseInt(m[1], 10));
+  }
+
+  // 연수 정보가 없으면 원본 반환 (단, 정제된 쉼표 처리 등은 필요할 수 있음)
+  if (years.length === 0) {
+    return text;
+  }
+
+  // 최대 연수 찾기
+  const maxYear = Math.max(...years);
+
+  // 문구 생성
+  let result = `${maxYear}년 미만`;
+
+  // 예비창업자가 포함되어 있으면 병기
+  if (hasPre) {
+    result = `예비창업자, ${result}`;
+  }
+
+  return result;
+}
+
+/**
  * 상세 페이지 파싱 결과 타입
  */
 interface DetailPageData {
@@ -215,6 +248,7 @@ interface DetailPageData {
   targetType?: string;
   companyAge?: string;
   supportField?: string;
+  fundingAmount?: string;
   institutionType?: string;
   applicationStart?: Date;
   applicationEnd?: Date;
@@ -264,9 +298,12 @@ function parseDetailPage(html: string): DetailPageData {
     } else if (text.startsWith('대상') && !text.includes('대상연령')) {
       result.targetType = text.replace('대상', '').trim();
     } else if (text.startsWith('창업업력')) {
-      result.companyAge = text.replace('창업업력', '').trim();
+      const fieldRaw = text.replace('창업업력', '').trim();
+      result.companyAge = normalizeCompanyAge(fieldRaw);
     } else if (text.startsWith('기관구분')) {
       result.institutionType = text.replace('기관구분', '').trim();
+    } else if (text.startsWith('지원규모') || text.startsWith('지원금액') || text.startsWith('지원한도')) {
+      result.fundingAmount = text.replace(/지원(규모|금액|한도)/, '').trim();
     } else if (text.startsWith('주관기관명')) {
       // 주관기관은 별도 필드로 처리 (조직명)
     } else if (text.startsWith('접수기간')) {
@@ -518,6 +555,7 @@ export async function crawlKStartup(options: CrawlOptions = {}, browser?: Browse
                 targetType: programData.targetType,
                 companyAge: programData.companyAge,
                 supportField: programData.supportField,
+                fundingAmount: programData.fundingAmount,
                 institutionType: programData.institutionType,
                 applicationStart: programData.applicationStart,
                 updatedAt: new Date(),
@@ -539,6 +577,7 @@ export async function crawlKStartup(options: CrawlOptions = {}, browser?: Browse
                 targetType: programData.targetType,
                 companyAge: programData.companyAge,
                 supportField: programData.supportField,
+                fundingAmount: programData.fundingAmount,
                 institutionType: programData.institutionType,
                 applicationStart: programData.applicationStart,
               },

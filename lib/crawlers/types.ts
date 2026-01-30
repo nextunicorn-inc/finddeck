@@ -18,6 +18,7 @@ export interface SupportProgramData {
   targetType?: string;      // 대상기업유형
   companyAge?: string;      // 창업업력
   supportField?: string;    // 지원분야
+  fundingAmount?: string;   // 지원금액
   institutionType?: string; // 기관구분
 
   // AI 추출 데이터

@@ -196,6 +196,7 @@ interface DetailPageData {
   applicationEnd?: Date;
   targetRegion?: string;
   supportField?: string;
+  fundingAmount?: string;
 }
 
 /**
@@ -249,6 +250,8 @@ function parseDetailPage(html: string): DetailPageData {
       result.targetRegion = value;
     } else if (headerText.includes('분야') || headerText.includes('지원분야')) {
       result.supportField = value;
+    } else if (headerText.includes('지원규모') || headerText.includes('지원금액') || headerText.includes('지원한도')) {
+      result.fundingAmount = value;
     }
   });
 
@@ -277,6 +280,8 @@ function parseDetailPage(html: string): DetailPageData {
         result.targetRegion = value;
       } else if (headerText.includes('분야') || headerText.includes('지원분야')) {
         result.supportField = value;
+      } else if (headerText.includes('지원규모') || headerText.includes('지원금액') || headerText.includes('지원한도')) {
+        result.fundingAmount = value;
       }
     });
   }
@@ -294,11 +299,54 @@ function parseDetailPage(html: string): DetailPageData {
   if (result.description) result.description = result.description.substring(0, 5000);
   if (result.eligibility) result.eligibility = result.eligibility.substring(0, 2000);
 
+  // 방법 3: 카테고리 태그에서 supportField 추출 (fallback)
+  if (!result.supportField) {
+    // Bizinfo는 제목 위에 .tag 클래스로 카테고리를 표시함 (예: "경영", "기술", "자금")
+    const tagEl = $('.tag, .category, span.cate, .view_cate').first();
+    if (tagEl.length) {
+      const tagText = getCleanText($, tagEl).trim();
+      if (tagText) {
+        // 매핑: Bizinfo 카테고리를 표준 지원분야로 변환
+        const categoryMap: Record<string, string> = {
+          '경영': '자금',
+          '기술': '기술개발',
+          '인력': '인력',
+          '수출': '수출',
+          '창업': '창업',
+          '금융': '자금',
+          '내수': '판로',
+          '기타': '기타',
+        };
+        result.supportField = categoryMap[tagText] || tagText;
+      }
+    }
+  }
+
+  // 방법 4: 사업개요 텍스트에서 금액 패턴 추출 (fallback)
+  if (!result.fundingAmount && result.description) {
+    // 패턴 예: "최대 1억원", "5천만원 이내", "500원/kg"
+    const fundingPatterns = [
+      /최대\s*(\d+(?:,\d+)*\s*(?:억|천만|백만|만)?원)/,
+      /(\d+(?:,\d+)*\s*(?:억|천만|백만|만)?원)\s*(?:이내|이하|한도)/,
+      /지원금액[:\s]*(\d+(?:,\d+)*\s*(?:억|천만|백만|만)?원)/,
+      /(\d+(?:,\d+)*원\/kg)/
+    ];
+    for (const pattern of fundingPatterns) {
+      const match = result.description.match(pattern);
+      if (match) {
+        result.fundingAmount = match[1] || match[0];
+        break;
+      }
+    }
+  }
+
   console.log('[bizinfo] parseDetailPage result:', {
     hasDescription: !!result.description,
     descriptionLength: result.description?.length,
     hasEligibility: !!result.eligibility,
     organization: result.organization,
+    supportField: result.supportField,
+    fundingAmount: result.fundingAmount,
   });
 
   return result;
@@ -481,6 +529,8 @@ export async function crawlBizinfo(options: CrawlOptions = {}, browser?: Browser
                 targetRegion: (detailData as any)?.targetRegion || programData.targetRegion, // prioritize LLM
                 targetAge: (detailData as any)?.targetAge,
                 targetIndustry: (detailData as any)?.targetIndustry,
+                supportField: programData.supportField,
+                fundingAmount: (detailData as any)?.fundingAmount,
 
                 llmProcessed: (detailData as any)?.llmProcessed || false,
                 applicationTarget: null, // Clear old field
@@ -502,6 +552,7 @@ export async function crawlBizinfo(options: CrawlOptions = {}, browser?: Browser
                 targetAge: (detailData as any)?.targetAge,
                 targetIndustry: (detailData as any)?.targetIndustry,
                 supportField: programData.supportField,
+                fundingAmount: (detailData as any)?.fundingAmount,
 
                 llmProcessed: (detailData as any)?.llmProcessed || false,
                 applicationTarget: null,
