@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useRef } from 'react';
+import Link from 'next/link';
 
 interface MatchingProgram {
   id: string;
@@ -12,6 +13,8 @@ interface MatchingProgram {
   targetRegion: string | null;
   targetAge: string | null;
   targetIndustry: string | null;
+  supportField: string | null;
+  fundingAmount: string | null;
 }
 
 interface MatchResult {
@@ -23,11 +26,13 @@ interface MatchResult {
 export default function Home() {
   const [foundingYear, setFoundingYear] = useState('');
   const [region, setRegion] = useState('');
-  const [birthMonth, setBirthMonth] = useState('');
+  const [birthYearInput, setBirthYearInput] = useState('');
+  const [birthMonthSelect, setBirthMonthSelect] = useState('');
   const [industry, setIndustry] = useState('');
   const [results, setResults] = useState<MatchingProgram[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const monthRef = useRef<HTMLSelectElement>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,7 +43,15 @@ export default function Home() {
       const params = new URLSearchParams();
       if (foundingYear) params.set('foundingYear', foundingYear);
       if (region) params.set('region', region);
-      if (birthMonth) params.set('birthMonth', birthMonth);
+
+      if (birthYearInput && birthMonthSelect) {
+        // YYYY-MM 형식 조합
+        params.set('birthMonth', `${birthYearInput}-${birthMonthSelect.padStart(2, '0')}`);
+      } else if (birthYearInput) {
+        // 연도만 있는 경우 1월로 기본값 처리하거나 API에서 처리 (여기선 일단 보냄)
+        params.set('birthMonth', `${birthYearInput}-01`);
+      }
+
       if (industry) params.set('industry', industry);
 
       const response = await fetch(`/api/match?${params}`);
@@ -51,6 +64,15 @@ export default function Home() {
       console.error('매칭 실패:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBirthYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.slice(0, 4); // 4자리 제한
+    setBirthYearInput(val);
+
+    if (val.length === 4 && monthRef.current) {
+      monthRef.current.focus();
     }
   };
 
@@ -146,12 +168,28 @@ export default function Home() {
               <label className="block text-sm font-medium text-zinc-300 mb-2">
                 대표자 생년월
               </label>
-              <input
-                type="month"
-                value={birthMonth}
-                onChange={(e) => setBirthMonth(e.target.value)}
-                className="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={birthYearInput}
+                  onChange={handleBirthYearChange}
+                  placeholder="년도 (4자리)"
+                  className="flex-1 rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <select
+                  ref={monthRef}
+                  value={birthMonthSelect}
+                  onChange={(e) => setBirthMonthSelect(e.target.value)}
+                  className="w-24 rounded-lg border border-zinc-600 bg-zinc-900 px-4 py-3 text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">월</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m.toString()}>
+                      {m}월
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* 업종 */}
@@ -209,11 +247,9 @@ export default function Home() {
                 {results.map((program) => {
                   const dday = getDday(program.applicationEnd);
                   return (
-                    <a
+                    <Link
                       key={program.id}
-                      href={program.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={`/programs/${program.id}`}
                       className="block bg-zinc-800/50 rounded-xl p-5 border border-zinc-700/50 hover:border-blue-500/50 hover:bg-zinc-800 transition-all group"
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -240,6 +276,16 @@ export default function Home() {
                                 연령: {program.targetAge}
                               </span>
                             )}
+                            {program.supportField && (
+                              <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2.5 py-1 text-xs text-blue-300">
+                                분야: {program.supportField}
+                              </span>
+                            )}
+                            {program.fundingAmount && (
+                              <span className="inline-flex items-center rounded-full bg-yellow-500/20 px-2.5 py-1 text-xs text-yellow-300">
+                                금액: {program.fundingAmount}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
@@ -256,7 +302,7 @@ export default function Home() {
                           </p>
                         </div>
                       </div>
-                    </a>
+                    </Link>
                   );
                 })}
               </div>

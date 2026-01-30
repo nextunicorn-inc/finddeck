@@ -3,6 +3,27 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
+interface SupportProgram {
+  id: string;
+  title: string;
+  url: string;
+  organization: string | null;
+  applicationStart: Date | null;
+  applicationEnd: Date | null;
+  region: string | null;
+  viewCount: number | null;
+  supportField: string | null;
+  fundingAmount: string | null;
+  targetAge: string | null;
+  targetRegion: string | null;
+  targetIndustry: string | null;
+  companyAge: string | null;
+  eligibility: string | null;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 interface Props {
   params: {
     id: string;
@@ -12,7 +33,7 @@ interface Props {
 export default async function ProgramDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const program = await prisma.supportProgram.findUnique({
+  const program: SupportProgram | null = await prisma.supportProgram.findUnique({
     where: { id },
   });
 
@@ -93,6 +114,7 @@ export default async function ProgramDetailPage({ params }: Props) {
           </div>
           <div className="p-6 space-y-4">
             <InfoRow label="지원 분야" value={program.supportField} />
+            <InfoRow label="지원 금액" value={program.fundingAmount} />
             <InfoRow label="담당 기관" value={program.organization} />
             <InfoRow label="접수 기간" value={`${formatDate(program.applicationStart)} ~ ${formatDate(program.applicationEnd)}`} />
             <InfoRow label="지역 (상세)" value={program.region} />
